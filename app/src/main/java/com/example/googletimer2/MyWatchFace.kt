@@ -419,12 +419,12 @@ class MyWatchFace : CanvasWatchFaceService() {
         override fun onTapCommand(tapType: Int, x: Int, y: Int, eventTime: Long) {
             when (tapType) {
                 WatchFaceService.TAP_TYPE_TAP -> {
-                    if( isButton(x, y) ){
+                    if( isButton(x.toFloat(), y.toFloat()) ){
                         mTouchCoordinateX = 0
                         mTouchCoordinateY = 0
                         ma = 0F
                     }
-                    else if( isTimerSet(x, y) ){
+                    else if( isTimerSet(x.toFloat(), y.toFloat()) ){
                         mTouchCoordinateX = x
                         mTouchCoordinateY = y
                         mTimerOn = true
@@ -509,12 +509,13 @@ class MyWatchFace : CanvasWatchFaceService() {
             }
         }
 
-        private fun isTimerSet(x:Int, y:Int):Boolean{
-            return (x in 59..257) && (y in 59..257)
+        private fun isTimerSet(x:Float, y:Float):Boolean{
+            val resources: Resources = this@MyWatchFace.resources
+            return (x in (mCenterX - resources.getDimension(R.dimen.arc_left)) .. ( mCenterX + resources.getDimension(R.dimen.arc_right) ) ) && (y in ( mCenterY - resources.getDimension(R.dimen.arc_top) ) ..( mCenterY + resources.getDimension(R.dimen.arc_bottom) ))
         }
 
-        private fun isButton(x:Int, y:Int):Boolean{
-            return (x in 151..164) && (y in 151..164)
+        private fun isButton(x:Float, y:Float):Boolean{
+            return (x in ( mCenterX - 10 ) .. ( mCenterX + 10 ) ) && (y in ( mCenterY - 10 ) .. ( mCenterY + 10 ))
         }
 
         private fun drawWatchFace(canvas: Canvas) {
@@ -525,6 +526,7 @@ class MyWatchFace : CanvasWatchFaceService() {
              */
             val now = System.currentTimeMillis()
             mCalendar.timeInMillis = now
+            val resources: Resources = this@MyWatchFace.resources
 
             val innerTickRadius = mCenterX - 10
             val outerTickRadius = mCenterX
@@ -622,10 +624,10 @@ class MyWatchFace : CanvasWatchFaceService() {
             arcLinePaint.style = Paint.Style.STROKE
 
             val rect = RectF()
-            rect.left = 60F
-            rect.right = 260F
-            rect.top = 60F
-            rect.bottom = 260F
+            rect.left = mCenterX - resources.getDimension(R.dimen.arc_left)
+            rect.right = mCenterX + resources.getDimension(R.dimen.arc_right)
+            rect.top = mCenterY - resources.getDimension(R.dimen.arc_top)
+            rect.bottom = mCenterY + resources.getDimension(R.dimen.arc_bottom)
             if( 0F < ma ) {
                 canvas.drawArc(rect, 270F, ma, true, arcFillPaint)
                 canvas.drawArc(rect, 270F, ma, true, arcLinePaint)
