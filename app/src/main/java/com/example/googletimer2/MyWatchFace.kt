@@ -9,21 +9,21 @@ import android.graphics.*
 import android.os.Bundle
 import android.os.Handler
 import android.os.Message
-import androidx.palette.graphics.Palette
 import android.support.wearable.watchface.CanvasWatchFaceService
 import android.support.wearable.watchface.WatchFaceService
 import android.support.wearable.watchface.WatchFaceStyle
 import android.text.format.DateFormat
+import android.util.Log
+import android.view.MotionEvent
 import android.view.SurfaceHolder
 import android.view.WindowInsets
+import android.widget.Button
 import android.widget.Toast
 import androidx.core.content.ContextCompat
-
+import androidx.palette.graphics.Palette
 import com.example.android.wearable.watchface.util.DigitalWatchFaceUtil
-
 import java.lang.ref.WeakReference
-import java.util.Calendar
-import java.util.TimeZone
+import java.util.*
 
 /**
  * Updates rate in milliseconds for interactive mode. We update once a second to advance the
@@ -40,7 +40,7 @@ private const val HOUR_STROKE_WIDTH = 5f
 private const val MINUTE_STROKE_WIDTH = 3f
 private const val SECOND_TICK_STROKE_WIDTH = 2f
 
-private const val CENTER_GAP_AND_CIRCLE_RADIUS = 4f
+private const val CENTER_GAP_AND_CIRCLE_RADIUS = 8f
 
 private const val SHADOW_RADIUS = 6f
 
@@ -95,6 +95,13 @@ class MyWatchFace : CanvasWatchFaceService() {
         private lateinit var mMinSecPaint: Paint
         private lateinit var mAmPmPaint: Paint
 
+        private var mTimerOn: Boolean = false
+        private var mbIsStarted: Boolean = false
+        private var mTouchCoordinateX: Int = 0
+        private var mTouchCoordinateY: Int = 0
+        private var ma: Float = 0F
+        private var mBeforeTime: Long = 0
+
         private var mRegisteredTimeZoneReceiver = false
         private var mMuteMode: Boolean = false
         private var mCenterX: Float = 0F
@@ -121,7 +128,7 @@ class MyWatchFace : CanvasWatchFaceService() {
         private var mAmbient: Boolean = false
         private var mLowBitAmbient: Boolean = false
         private var mBurnInProtection: Boolean = false
-        var bIsRound: Boolean = false
+        private var bIsRound: Boolean = false
 
         var mInteractiveBackgroundColor: Int =
             DigitalWatchFaceUtil.COLOR_VALUE_DEFAULT_AND_AMBIENT_BACKGROUND
@@ -237,7 +244,7 @@ class MyWatchFace : CanvasWatchFaceService() {
                 color = mWatchHandColor
                 strokeWidth = SECOND_TICK_STROKE_WIDTH
                 isAntiAlias = true
-                style = Paint.Style.STROKE
+                style = Paint.Style.FILL_AND_STROKE
                 setShadowLayer(
                     SHADOW_RADIUS, 0f, 0f, mWatchHandShadowColor
                 )
@@ -363,7 +370,7 @@ class MyWatchFace : CanvasWatchFaceService() {
              * Calculate lengths of different hands based on watch screen size.
              */
             mSecondHandLength = (mCenterX * 0.875).toFloat()
-            sMinuteHandLength = (mCenterX * 0.75).toFloat()
+            sMinuteHandLength = (mCenterX * 0.625).toFloat()
             sHourHandLength = (mCenterX * 0.5).toFloat()
 
             /* Scale loaded background image (more efficient) if surface dimensions change. */
@@ -411,18 +418,20 @@ class MyWatchFace : CanvasWatchFaceService() {
          */
         override fun onTapCommand(tapType: Int, x: Int, y: Int, eventTime: Long) {
             when (tapType) {
-                WatchFaceService.TAP_TYPE_TOUCH -> {
-                    // The user has started touching the screen.
+                WatchFaceService.TAP_TYPE_TAP -> {
+                    if( isButton(x, y) ){
+                        mTouchCoordinateX = 0
+                        mTouchCoordinateY = 0
+                        ma = 0F
+                    }
+                    else if( isTimerSet(x, y) ){
+                        mTouchCoordinateX = x
+                        mTouchCoordinateY = y
+                        mTimerOn = true
+                    }
                 }
-                WatchFaceService.TAP_TYPE_TOUCH_CANCEL -> {
-                    // The user has started a different gesture or otherwise cancelled the tap.
-                }
-                WatchFaceService.TAP_TYPE_TAP ->
-                    // The user has completed the tap gesture.
-                    // TODO: Add code to handle the tap gesture.
-                    Toast.makeText(applicationContext, R.string.message, Toast.LENGTH_SHORT)
-                        .show()
             }
+
             invalidate()
         }
 
@@ -467,6 +476,10 @@ class MyWatchFace : CanvasWatchFaceService() {
                 strPm = PM_STRING
                 strHour = String.format("%02d", Hour)
             }
+            canvas.drawText( mTouchCoordinateX.toString(), 100F, 80F, mAmPmPaint )
+            canvas.drawText( mTouchCoordinateY.toString(), 100F, 100F, mAmPmPaint )
+            canvas.drawText( ma.toString(), 100F, 120F, mAmPmPaint )
+
             canvas.drawText(strHour, X, mYOffset, mHour2Paint)
             X += mHour2Paint.measureText(strHour)
 
@@ -499,13 +512,23 @@ class MyWatchFace : CanvasWatchFaceService() {
             }
         }
 
-        private fun drawWatchFace(canvas: Canvas) {
+        private fun isTimerSet(x:Int, y:Int):Boolean{
+            return (x in 59..257) && (y in 59..257)
+        }
 
+        private fun isButton(x:Int, y:Int):Boolean{
+            return (x in 151..164) && (y in 151..164)
+        }
+
+        private fun drawWatchFace(canvas: Canvas) {
             /*
              * Draw ticks. Usually you will want to bake this directly into the photo, but in
              * cases where you want to allow users to select their own photos, this dynamically
              * creates them on top of the photo.
              */
+            val now = System.currentTimeMillis()
+            mCalendar.timeInMillis = now
+
             val innerTickRadius = mCenterX - 10
             val outerTickRadius = mCenterX
             val mLongTickPaint = Paint()
@@ -555,57 +578,72 @@ class MyWatchFace : CanvasWatchFaceService() {
                 }
             }
 
-            /*
-             * These calculations reflect the rotation in degrees per unit of time, e.g.,
-             * 360 / 60 = 6 and 360 / 12 = 30.
-             */
-            val seconds =
-                mCalendar.get(Calendar.SECOND) + mCalendar.get(Calendar.MILLISECOND) / 1000f
-            val secondsRotation = seconds * 6f
+            var nowTime = mCalendar.timeInMillis
+            if( mBeforeTime != 0L )
+                nowTime -= mBeforeTime
 
-            val minutesRotation = mCalendar.get(Calendar.MINUTE) * 6f
+            if( 0 < ma && mbIsStarted )
+                ma -= ( nowTime / 1000F ) * 0.1F
 
-            val hourHandOffset = mCalendar.get(Calendar.MINUTE) / 2f
-            val hoursRotation = mCalendar.get(Calendar.HOUR) * 30 + hourHandOffset
+            if( (mTouchCoordinateX > 0 && mTouchCoordinateY > 0) && mTimerOn) {
+                var tx = mTouchCoordinateX - mCenterX
+                var ty = mTouchCoordinateY - mCenterY
+
+                var t_len = Math.sqrt((tx * tx + ty * ty).toDouble())
+                var a = Math.toDegrees(-Math.acos((ty / t_len))).toFloat()
+
+                if (tx > 0 && ty > 0) {
+                    ma = a + 180
+                } else if (tx > 0 && ty < 0) {
+                    ma = a + 180
+                } else if (tx < 0 && ty > 0) {
+                    ma = 180 - a
+                } else if (tx < 0 && ty < 0) {
+                    ma = 180 - a
+                }
+
+                ma -= 1F
+
+                mTimerOn = false
+                mbIsStarted = true
+            }
 
             /*
              * Save the canvas state before we can begin to rotate it.
              */
+            val arcFillPaint = Paint()
+            val arcLinePaint = Paint()
+            val arcColor = Color()
+
+            arcFillPaint.set(mTickAndCirclePaint)
+            arcFillPaint.strokeWidth = 3F
+            arcLinePaint.set(arcFillPaint)
+            arcFillPaint.color = Color.GRAY
+            arcFillPaint.color = Color.rgb(60, 66, 213)
+            arcLinePaint.color = Color.WHITE
+            arcFillPaint.style = Paint.Style.FILL
+            arcLinePaint.style = Paint.Style.STROKE
+
+            val rect = RectF()
+            rect.left = 60F
+            rect.right = 260F
+            rect.top = 60F
+            rect.bottom = 260F
+            if( 0F < ma ) {
+                canvas.drawArc(rect, 270F, ma, true, arcFillPaint)
+                canvas.drawArc(rect, 270F, ma, true, arcLinePaint)
+            }
+            else {
+                canvas.drawArc(rect, 270F, 0.1F, true, arcFillPaint)
+                canvas.drawArc(rect, 270F, 0.1F, true, arcLinePaint)
+            }
+
             canvas.save()
-
-            canvas.rotate(hoursRotation, mCenterX, mCenterY)
-            canvas.drawLine(
-                mCenterX,
-                mCenterY - CENTER_GAP_AND_CIRCLE_RADIUS,
-                mCenterX,
-                mCenterY - sHourHandLength,
-                mHourPaint
-            )
-
-            canvas.rotate(minutesRotation - hoursRotation, mCenterX, mCenterY)
-            canvas.drawLine(
-                mCenterX,
-                mCenterY - CENTER_GAP_AND_CIRCLE_RADIUS,
-                mCenterX,
-                mCenterY - sMinuteHandLength,
-                mMinutePaint
-            )
-
             /*
              * Ensure the "seconds" hand is drawn only when we are in interactive mode.
              * Otherwise, we only update the watch face once a minute.
              */
-            if (!mAmbient) {
-                canvas.rotate(secondsRotation - minutesRotation, mCenterX, mCenterY)
-                canvas.drawLine(
-                    mCenterX,
-                    mCenterY - CENTER_GAP_AND_CIRCLE_RADIUS,
-                    mCenterX,
-                    mCenterY - mSecondHandLength,
-                    mSecondPaint
-                )
 
-            }
             canvas.drawCircle(
                 mCenterX,
                 mCenterY,
@@ -614,6 +652,7 @@ class MyWatchFace : CanvasWatchFaceService() {
             )
 
             /* Restore the canvas" original orientation. */
+            mBeforeTime = mCalendar.timeInMillis
             canvas.restore()
         }
 
