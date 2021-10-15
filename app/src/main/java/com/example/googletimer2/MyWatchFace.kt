@@ -476,9 +476,6 @@ class MyWatchFace : CanvasWatchFaceService() {
                 strPm = PM_STRING
                 strHour = String.format("%02d", Hour)
             }
-            canvas.drawText( mTouchCoordinateX.toString(), 100F, 80F, mAmPmPaint )
-            canvas.drawText( mTouchCoordinateY.toString(), 100F, 100F, mAmPmPaint )
-            canvas.drawText( ma.toString(), 100F, 120F, mAmPmPaint )
 
             canvas.drawText(strHour, X, mYOffset, mHour2Paint)
             X += mHour2Paint.measureText(strHour)
